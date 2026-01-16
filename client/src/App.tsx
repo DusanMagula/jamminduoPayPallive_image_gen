@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Car as Jar, ShoppingBasket, Phone, Mail, X } from 'lucide-react';
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
+import strawberryJamImg from '@assets/951447e8-cfe4-4ba0_1768556543588.jpg';
 
 interface CartItem {
   id: string;
@@ -177,7 +178,7 @@ function App() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               <div className="bg-white rounded-lg p-6 shadow-lg hover:shadow-xl transition">
                 <div className="mb-4 flex justify-center">
-                  <img src="https://i.imgur.com/uqbYiuM.png" alt="Strawberry Jam" className="w-48 h-auto object-contain" />
+                  <img src={strawberryJamImg} alt="Strawberry Jam" className="w-48 h-auto object-contain" />
                 </div>
                 <h3 className="text-2xl font-bold mb-2">Strawberry</h3>
                 <p className="text-gray-600 mb-4">Handcrafted with fresh local strawberries</p>
