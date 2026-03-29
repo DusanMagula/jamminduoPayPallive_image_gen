@@ -1,3 +1,6 @@
+main is JD website without image generation. This is already deployed through Replit Netlify deployment. Please note, its not deployed directly from Github
+
+
 # Jamming Duo – PayPal Live (Frontend-only)
 
 Jamming Duo is a small e-commerce website for selling homemade jam products.
