@@ -1,4 +1,4 @@
-main is JD website without image generation. This is already deployed through Replit Netlify deployment. Please note, its not deployed directly from Github
+GOAL: main is JD website without image generation. This is already deployed through Replit Netlify deployment. Please note, its not deployed directly from Github
 
 
 # Jamming Duo – PayPal Live (Frontend-only)
