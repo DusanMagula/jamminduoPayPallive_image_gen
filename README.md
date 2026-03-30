@@ -1,4 +1,4 @@
-GOAL: main is JD website without image generation. This is already deployed through Replit Netlify deployment. Please note, its not deployed directly from Github
+GOAL: The main goal is to develop website that does image generation.  The starting point is this repository https://github.com/DusanMagula/jamminduoPayPallive_no_image.git
 
 
 # Jamming Duo – PayPal Live (Frontend-only)
