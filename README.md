@@ -1,5 +1,24 @@
 GOAL: The main goal is to develop website that does image generation.  The starting point is this repository https://github.com/DusanMagula/jamminduoPayPallive_no_image.git
 
+## Local Development
+
+This repo can be run locally with Vite hot reload.
+
+1. Install dependencies:
+   `npm install`
+2. Create a `.env.local` file in the repo root with:
+   `VITE_PAYPAL_CLIENT_ID=sb`
+3. Start the local dev server:
+   `npm run dev`
+4. Open:
+   `http://localhost:5173`
+
+Notes:
+
+* `VITE_PAYPAL_CLIENT_ID=sb` uses PayPal's sandbox shortcut for local development. Replace it with your real sandbox or live client ID when needed.
+* `npm run dev` is the recommended local workflow for browser hot reload.
+* `npm run dev:full` starts the older Express + Vite wrapper if you specifically want to exercise the server entry point.
+
 
 # Jamming Duo – PayPal Live (Frontend-only)
 

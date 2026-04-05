@@ -14,6 +14,7 @@ function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const paypalClientId = import.meta.env.VITE_PAYPAL_CLIENT_ID || 'sb';
 
   const addToCart = (item: Omit<CartItem, 'quantity'>) => {
     setCart(prevCart => {
@@ -46,7 +47,7 @@ function App() {
   const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   const paypalOptions = {
-    clientId: import.meta.env.VITE_PAYPAL_CLIENT_ID,
+    clientId: paypalClientId,
     currency: 'GBP',
     intent: 'capture',
     disableFunding: 'card'
@@ -102,6 +103,10 @@ function App() {
               <PayPalButtons
                 disabled={cart.length === 0 || totalAmount <= 0}
                 createOrder={(data, actions) => {
+                  if (!actions.order) {
+                    throw new Error('PayPal order actions are unavailable');
+                  }
+
                   return actions.order.create({
                     intent: 'CAPTURE',
                     purchase_units: [
@@ -115,6 +120,10 @@ function App() {
                   });
                 }}
                 onApprove={(data, actions) => {
+                  if (!actions.order) {
+                    throw new Error('PayPal order actions are unavailable');
+                  }
+
                   return actions.order.capture().then(details => {
                     alert(`Payment completed! Thank you, ${details.payer?.name?.given_name || 'customer'}!`);
                     setCart([]);
@@ -241,11 +250,11 @@ function App() {
             <div className="flex flex-col md:flex-row justify-center gap-8 md:gap-12">
               <div className="flex items-center gap-4">
                 <Phone className="w-6 h-6 text-red-500" />
-                <span>(555) 123-4567</span>
+                <span>hello@jamminduo.com</span>
               </div>
               <div className="flex items-center gap-4">
                 <Mail className="w-6 h-6 text-red-500" />
-                <span>hello@jamminduo.com</span>
+                <span>jammin.duo.woking@gmail.com</span>
               </div>
             </div>
           </div>
