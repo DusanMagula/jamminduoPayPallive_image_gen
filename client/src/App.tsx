@@ -250,7 +250,7 @@ function App() {
             <div className="flex flex-col md:flex-row justify-center gap-8 md:gap-12">
               <div className="flex items-center gap-4">
                 <Phone className="w-6 h-6 text-red-500" />
-                <span>hello@jamminduo.com</span>
+                <span>00 44 797 997 3466</span>
               </div>
               <div className="flex items-center gap-4">
                 <Mail className="w-6 h-6 text-red-500" />
