@@ -1,15 +1,25 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { supabase } from "./lib/supabase";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // put application routes here
-  // prefix all routes with /api
+  app.post('/api/sessions', async (req, res) => {
+    const referrer = req.headers.referer ?? null;
+    const userAgent = req.headers['user-agent'] ?? null;
 
-  // use storage to perform CRUD operations on the storage interface
-  // e.g. storage.insertUser(user) or storage.getUserByUsername(username)
+    const { data, error } = await supabase
+      .from('sessions')
+      .insert({ referrer, user_agent: userAgent })
+      .select('id')
+      .single();
+
+    if (error || !data) {
+      return res.status(500).json({ error: 'Failed to create session' });
+    }
+
+    return res.status(201).json({ session_id: data.id });
+  });
 
   const httpServer = createServer(app);
-
   return httpServer;
 }

@@ -5,6 +5,7 @@ import type { CartItem } from '@/types/cart';
 import CartDrawer from '@/components/CartDrawer';
 import HomePage from '@/pages/HomePage';
 import ConfirmationPage from '@/pages/ConfirmationPage';
+import { SessionProvider } from '@/context/SessionContext';
 
 function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -51,6 +52,7 @@ function App() {
 
   return (
     <PayPalScriptProvider options={paypalOptions}>
+      <SessionProvider>
       <div className="min-h-screen bg-white relative">
         <Switch>
           <Route path="/">
@@ -81,6 +83,7 @@ function App() {
           }}
         />
       </div>
+      </SessionProvider>
     </PayPalScriptProvider>
   );
 }
