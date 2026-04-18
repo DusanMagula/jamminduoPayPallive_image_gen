@@ -26,7 +26,7 @@ export default function ProductCard({ id, name, displayName, description, price,
       <div className="flex justify-between items-center">
         <span className="text-xl font-bold">£{price.toFixed(2)}</span>
         <button
-          onClick={() => onAddToCart({ id, name, price })}
+          onClick={() => onAddToCart({ id, product_id: id, name, price })}
           className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-full hover:bg-red-600 transition"
         >
           <ShoppingBasket className="w-4 h-4" /> Add to Cart
