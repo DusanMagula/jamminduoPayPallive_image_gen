@@ -20,6 +20,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return res.status(201).json({ session_id: data.id });
   });
 
+  app.get('/api/products', async (_req, res) => {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('active', true);
+
+    if (error) {
+      return res.status(500).json({ error: 'Failed to fetch products' });
+    }
+
+    return res.status(200).json(data);
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

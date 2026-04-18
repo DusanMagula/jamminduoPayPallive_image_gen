@@ -1,7 +1,9 @@
 import { Phone, Mail } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import Nav from '@/components/Nav';
 import ProductCard from '@/components/ProductCard';
 import type { CartItem } from '@/types/cart';
+import type { Product } from '@shared/types';
 import strawberryJamImg from '@assets/951447e8-cfe4-4ba0_1768556543588.jpg';
 
 interface HomePageProps {
@@ -12,6 +14,17 @@ interface HomePageProps {
 
 export default function HomePage({ cart, onAddToCart, onCartOpen }: HomePageProps) {
   const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  const { data: products, isLoading, isError } = useQuery<Product[]>({
+    queryKey: ['products'],
+    queryFn: () => fetch('/api/products').then(r => r.json()),
+  });
+
+  function getImageUrl(product: Product): string | undefined {
+    if (product.image_url) return product.image_url;
+    if (product.name === 'Strawberry Jam') return strawberryJamImg;
+    return undefined;
+  }
 
   return (
     <div>
@@ -36,32 +49,23 @@ export default function HomePage({ cart, onAddToCart, onCartOpen }: HomePageProp
         <div className="max-w-6xl mx-auto px-4">
           <h2 className="text-4xl font-black text-center mb-16" style={{ fontFamily: 'Comic Sans MS, cursive' }}>Our Jams</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <ProductCard
-              id="strawberry"
-              name="Strawberry Jam"
-              displayName="Strawberry"
-              description="Handcrafted with fresh local strawberries"
-              price={5.49}
-              imageUrl={strawberryJamImg}
-              onAddToCart={onAddToCart}
-            />
-            <ProductCard
-              id="blueberry"
-              name="Blueberry Jam"
-              displayName="Blueberry"
-              description="Handcrafted with fresh local fruits"
-              price={5.49}
-              imageUrl="https://i.imgur.com/lJcWLh7.png"
-              onAddToCart={onAddToCart}
-            />
-            <ProductCard
-              id="mixed-berry"
-              name="Mixed Berry Jam"
-              displayName="Mixed Berry"
-              description="Handcrafted with fresh local fruits"
-              price={5.49}
-              onAddToCart={onAddToCart}
-            />
+            {isLoading && (
+              <p className="col-span-3 text-center text-gray-500">Loading products...</p>
+            )}
+            {isError && (
+              <p className="col-span-3 text-center text-red-500">Could not load products — please refresh</p>
+            )}
+            {products && products.map(product => (
+              <ProductCard
+                key={product.id}
+                id={product.id}
+                name={product.name}
+                description={product.description ?? ''}
+                price={product.price}
+                imageUrl={getImageUrl(product)}
+                onAddToCart={onAddToCart}
+              />
+            ))}
           </div>
         </div>
       </section>
