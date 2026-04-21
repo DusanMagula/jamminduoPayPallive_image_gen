@@ -43,9 +43,18 @@ export default function CartDrawer({
             <div className="space-y-4 mb-6">
               {cart.map(item => (
                 <div key={item.id} className="flex justify-between items-center border-b pb-4">
-                  <div>
-                    <h4 className="font-semibold">{item.name}</h4>
-                    <p className="text-gray-500">£{item.price.toFixed(2)}</p>
+                  <div className="flex items-center gap-2">
+                    {item.selected_image_url && (
+                      <img
+                        src={item.selected_image_url}
+                        alt="Custom label"
+                        className="w-12 h-12 object-cover rounded"
+                      />
+                    )}
+                    <div>
+                      <h4 className="font-semibold">{item.name}</h4>
+                      <p className="text-gray-500">£{item.price.toFixed(2)}</p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <button onClick={() => onUpdateQuantity(item.id, item.quantity - 1)} className="text-gray-500 hover:text-gray-700">-</button>

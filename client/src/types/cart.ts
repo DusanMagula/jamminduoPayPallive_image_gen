@@ -5,4 +5,5 @@ export interface CartItem {
   price: number;
   quantity: number;
   selected_image_id?: string;
+  selected_image_url?: string;
 }
