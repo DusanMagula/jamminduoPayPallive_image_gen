@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { supabase } from "./lib/supabase";
 import { generateLabelImages } from "./services/imageGeneration";
+import { createPayPalOrder } from "./services/paypal";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/sessions', async (req, res) => {
@@ -91,6 +92,126 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       return res.status(502).json({ error: 'Image generation failed' });
     }
+  });
+
+  app.post('/api/orders/create', async (req, res) => {
+    const { session_id, items } = req.body;
+
+    // Validate session_id
+    if (!session_id || typeof session_id !== 'string') {
+      return res.status(400).json({ error: 'session_id is required' });
+    }
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('sessions')
+      .select('id')
+      .eq('id', session_id)
+      .single();
+    if (sessionError || !sessionData) {
+      return res.status(400).json({ error: 'Invalid session_id' });
+    }
+
+    // Validate items
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items must be a non-empty array' });
+    }
+    for (const item of items) {
+      if (!item.product_id || typeof item.product_id !== 'string') {
+        return res.status(400).json({ error: 'Each item must have a product_id' });
+      }
+      if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+        return res.status(400).json({ error: 'Each item quantity must be a positive integer' });
+      }
+    }
+
+    // Validate selected_image_ids if present
+    for (const item of items) {
+      if (item.selected_image_id != null) {
+        const { data: imgData, error: imgError } = await supabase
+          .from('generated_images')
+          .select('id, session_id')
+          .eq('id', item.selected_image_id)
+          .single();
+        if (imgError || !imgData) {
+          return res.status(400).json({ error: `Invalid selected_image_id: ${item.selected_image_id}` });
+        }
+        if (imgData.session_id !== session_id) {
+          return res.status(400).json({ error: 'selected_image_id does not belong to this session' });
+        }
+      }
+    }
+
+    // Look up products and verify they exist and are active
+    const productIds: string[] = items.map((i: { product_id: string }) => i.product_id);
+    const { data: products, error: productsError } = await supabase
+      .from('products')
+      .select('id, price, active')
+      .in('id', productIds);
+    if (productsError || !products) {
+      return res.status(500).json({ error: 'Failed to create order' });
+    }
+    const productMap = new Map(products.map((p: { id: string; price: number; active: boolean }) => [p.id, p]));
+    for (const item of items) {
+      const product = productMap.get(item.product_id);
+      if (!product || !product.active) {
+        return res.status(400).json({ error: `Invalid or inactive product_id: ${item.product_id}` });
+      }
+    }
+
+    // Duplicate order check: pending order from same session in last 5 minutes
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: existingOrder } = await supabase
+      .from('orders')
+      .select('id, paypal_order_id')
+      .eq('session_id', session_id)
+      .eq('status', 'pending')
+      .gte('created_at', fiveMinutesAgo)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+    if (existingOrder) {
+      return res.status(201).json({ order_id: existingOrder.id, paypal_order_id: existingOrder.paypal_order_id });
+    }
+
+    // Calculate total from DB prices
+    let totalAmount = 0;
+    for (const item of items) {
+      const product = productMap.get(item.product_id)!;
+      totalAmount += product.price * item.quantity;
+    }
+    totalAmount = Math.round(totalAmount * 100) / 100;
+
+    // Create PayPal order
+    let paypalOrderId: string;
+    try {
+      paypalOrderId = await createPayPalOrder(totalAmount, 'GBP');
+    } catch {
+      return res.status(502).json({ error: 'Failed to create payment order' });
+    }
+
+    // Insert order
+    const { data: orderData, error: orderError } = await supabase
+      .from('orders')
+      .insert({ session_id, status: 'pending', total_amount: totalAmount, currency: 'GBP', paypal_order_id: paypalOrderId })
+      .select('id')
+      .single();
+    if (orderError || !orderData) {
+      return res.status(500).json({ error: 'Failed to create order' });
+    }
+
+    // Insert order items
+    const orderItems = items.map((item: { product_id: string; quantity: number; selected_image_id?: string | null }) => ({
+      order_id: orderData.id,
+      product_id: item.product_id,
+      quantity: item.quantity,
+      unit_price: productMap.get(item.product_id)!.price,
+      selected_image_id: item.selected_image_id ?? null,
+    }));
+    const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
+    if (itemsError) {
+      return res.status(500).json({ error: 'Failed to create order' });
+    }
+
+    return res.status(201).json({ order_id: orderData.id, paypal_order_id: paypalOrderId });
   });
 
   const httpServer = createServer(app);
