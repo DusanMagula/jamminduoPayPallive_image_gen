@@ -10,7 +10,6 @@ import { SessionProvider } from '@/context/SessionContext';
 function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [paymentError, setPaymentError] = useState<string | null>(null);
   const paypalClientId = import.meta.env.VITE_PAYPAL_CLIENT_ID || 'sb';
 
   const addToCart = (item: Omit<CartItem, 'quantity'>) => {
@@ -75,12 +74,7 @@ function App() {
           onUpdateQuantity={updateQuantity}
           totalAmount={totalAmount}
           paypalClientId={paypalClientId}
-          paymentError={paymentError}
-          onPaymentError={setPaymentError}
-          onPaymentSuccess={() => {
-            setCart([]);
-            setIsCartOpen(false);
-          }}
+          onClearCart={() => setCart([])}
         />
       </div>
       </SessionProvider>

@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { X } from 'lucide-react';
 import { PayPalButtons } from '@paypal/react-paypal-js';
+import { useLocation } from 'wouter';
 import type { CartItem } from '@/types/cart';
+import { useSession } from '@/context/SessionContext';
 
 interface CartDrawerProps {
   cart: CartItem[];
@@ -10,9 +13,7 @@ interface CartDrawerProps {
   onUpdateQuantity: (id: string, qty: number) => void;
   totalAmount: number;
   paypalClientId: string;
-  paymentError: string | null;
-  onPaymentError: (error: string) => void;
-  onPaymentSuccess: () => void;
+  onClearCart: () => void;
 }
 
 export default function CartDrawer({
@@ -22,10 +23,62 @@ export default function CartDrawer({
   onRemove,
   onUpdateQuantity,
   totalAmount,
-  paymentError,
-  onPaymentError,
-  onPaymentSuccess,
+  onClearCart,
 }: CartDrawerProps) {
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
+  const [, setLocation] = useLocation();
+  const { sessionId } = useSession();
+
+  async function createPayPalOrderCallback(): Promise<string> {
+    setCheckoutError(null);
+    setIsCheckingOut(true);
+    try {
+      const response = await fetch('/api/orders/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          items: cart.map(item => ({
+            product_id: item.product_id,
+            quantity: item.quantity,
+            selected_image_id: item.selected_image_id ?? null,
+          })),
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to create order');
+      const data = await response.json();
+      setCurrentOrderId(data.order_id);
+      return data.paypal_order_id;
+    } catch (err) {
+      setCheckoutError('Could not start checkout. Please try again.');
+      setIsCheckingOut(false);
+      throw err;
+    }
+  }
+
+  async function onApproveCallback(data: { orderID: string }) {
+    try {
+      const response = await fetch('/api/orders/capture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_id: currentOrderId,
+          paypal_order_id: data.orderID,
+        }),
+      });
+      if (!response.ok) throw new Error('Capture failed');
+      onClearCart();
+      onClose();
+      setLocation(`/confirmation?order_id=${currentOrderId}`);
+    } catch (err) {
+      setCheckoutError('Payment was approved but could not be confirmed. Please contact support.');
+    } finally {
+      setIsCheckingOut(false);
+    }
+  }
+
   return (
     <>
       <div className={`fixed right-0 top-0 h-full w-96 bg-white shadow-2xl transform transition-transform ${isOpen ? 'translate-x-0' : 'translate-x-full'} z-50`}>
@@ -75,50 +128,22 @@ export default function CartDrawer({
               <span className="font-bold">£{totalAmount.toFixed(2)}</span>
             </div>
 
-            {paymentError && (
+            {checkoutError && (
               <div className="bg-red-50 text-red-600 p-3 rounded-md mb-4">
-                {paymentError}
+                {checkoutError}
               </div>
             )}
 
             <PayPalButtons
-              disabled={cart.length === 0 || totalAmount <= 0}
-              createOrder={(data, actions) => {
-                if (!actions.order) {
-                  throw new Error('PayPal order actions are unavailable');
-                }
-                return actions.order.create({
-                  intent: 'CAPTURE',
-                  purchase_units: [
-                    {
-                      amount: {
-                        currency_code: 'GBP',
-                        value: totalAmount.toFixed(2),
-                      },
-                    },
-                  ],
-                });
-              }}
-              onApprove={(data, actions) => {
-                if (!actions.order) {
-                  throw new Error('PayPal order actions are unavailable');
-                }
-                return actions.order.capture().then(details => {
-                  alert(`Payment completed! Thank you, ${details.payer?.name?.given_name || 'customer'}!`);
-                  onPaymentSuccess();
-                });
-              }}
+              disabled={cart.length === 0 || totalAmount <= 0 || isCheckingOut}
+              createOrder={createPayPalOrderCallback}
+              onApprove={onApproveCallback}
               onError={(err) => {
                 console.error('PayPal error:', err);
-                onPaymentError('Payment failed. Please try again.');
+                setCheckoutError('Payment failed. Please try again.');
+                setIsCheckingOut(false);
               }}
-              style={{
-                layout: 'vertical',
-                color: 'gold',
-                shape: 'rect',
-                label: 'paypal',
-                tagline: false,
-              }}
+              style={{ layout: 'vertical', color: 'gold', shape: 'rect', label: 'paypal', tagline: false }}
               forceReRender={[totalAmount, cart.length]}
             />
           </div>
