@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { supabase } from "./lib/supabase";
 import { generateLabelImages } from "./services/imageGeneration";
-import { createPayPalOrder } from "./services/paypal";
+import { createPayPalOrder, capturePayPalOrder } from "./services/paypal";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/sessions', async (req, res) => {
@@ -212,6 +212,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     return res.status(201).json({ order_id: orderData.id, paypal_order_id: paypalOrderId });
+  });
+
+  app.post('/api/orders/capture', async (req, res) => {
+    const { order_id, paypal_order_id } = req.body;
+
+    if (!order_id || !paypal_order_id) {
+      return res.status(400).json({ error: 'order_id and paypal_order_id are required' });
+    }
+
+    const { data: order, error: orderError } = await supabase
+      .from('orders')
+      .select('id, status, paypal_order_id')
+      .eq('id', order_id)
+      .single();
+
+    if (orderError || !order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    if (order.paypal_order_id !== paypal_order_id) {
+      return res.status(400).json({ error: 'paypal_order_id does not match order' });
+    }
+
+    if (order.status === 'paid') {
+      return res.status(200).json({ order_id, status: 'paid' });
+    }
+
+    let captureId: string;
+    let payerName: string;
+    let payerEmail: string;
+    try {
+      ({ captureId, payerName, payerEmail } = await capturePayPalOrder(paypal_order_id));
+    } catch {
+      await supabase.from('orders').update({ status: 'failed' }).eq('id', order_id);
+      return res.status(502).json({ error: 'Payment capture failed' });
+    }
+
+    const { error: updateError } = await supabase
+      .from('orders')
+      .update({
+        paypal_capture_id: captureId,
+        customer_name: payerName,
+        customer_email: payerEmail,
+        status: 'paid',
+        paid_at: new Date().toISOString(),
+      })
+      .eq('id', order_id);
+
+    if (updateError) {
+      console.error('CRITICAL: PayPal captured but order update failed', {
+        order_id,
+        paypal_capture_id: captureId,
+        error: updateError,
+      });
+      return res.status(500).json({ error: 'Order record update failed — please contact support' });
+    }
+
+    return res.status(200).json({ order_id, status: 'paid' });
   });
 
   const httpServer = createServer(app);
