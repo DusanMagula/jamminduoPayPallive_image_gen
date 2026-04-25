@@ -272,6 +272,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return res.status(200).json({ order_id, status: 'paid' });
   });
 
+  app.get('/api/orders/:order_id', async (req, res) => {
+    const { order_id } = req.params;
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(order_id)) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const { data: order, error: orderError } = await supabase
+      .from('orders')
+      .select('id, status, total_amount, currency, customer_name, customer_email, paid_at')
+      .eq('id', order_id)
+      .single();
+
+    if (orderError || !order || order.status !== 'paid') {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const { data: rawItems, error: itemsError } = await supabase
+      .from('order_items')
+      .select('quantity, unit_price, selected_image_id, products(name)')
+      .eq('order_id', order_id);
+
+    if (itemsError || !rawItems) {
+      return res.status(500).json({ error: 'Failed to fetch order details' });
+    }
+
+    const imageIds = rawItems
+      .map((item: { selected_image_id: string | null }) => item.selected_image_id)
+      .filter((id): id is string => id !== null);
+
+    let imageMap = new Map<string, string>();
+    if (imageIds.length > 0) {
+      const { data: images } = await supabase
+        .from('generated_images')
+        .select('id, image_url')
+        .in('id', imageIds);
+      if (images) {
+        imageMap = new Map(
+          (images as { id: string; image_url: string }[]).map(img => [img.id, img.image_url])
+        );
+      }
+    }
+
+    return res.status(200).json({
+      order_id: order.id,
+      status: 'paid' as const,
+      total_amount: order.total_amount,
+      currency: order.currency,
+      customer_name: order.customer_name ?? null,
+      customer_email: order.customer_email ?? null,
+      paid_at: order.paid_at,
+      items: rawItems.map((item: { quantity: number; unit_price: number; selected_image_id: string | null; products: { name: string }[] | { name: string } | null }) => ({
+        product_name: (Array.isArray(item.products) ? item.products[0]?.name : item.products?.name) ?? 'Unknown',
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        selected_image_url: item.selected_image_id ? (imageMap.get(item.selected_image_id) ?? null) : null,
+      })),
+    });
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
