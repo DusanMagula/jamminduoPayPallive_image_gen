@@ -11,6 +11,9 @@ function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const paypalClientId = import.meta.env.VITE_PAYPAL_CLIENT_ID || 'sb';
+  if (!import.meta.env.VITE_PAYPAL_CLIENT_ID) {
+    console.warn('VITE_PAYPAL_CLIENT_ID is not set — PayPal will run in sandbox mode');
+  }
 
   const addToCart = (item: Omit<CartItem, 'quantity'>) => {
     setCart(prevCart => {

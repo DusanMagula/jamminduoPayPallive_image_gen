@@ -3,6 +3,26 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
+const REQUIRED_SERVER_VARS = [
+  'SUPABASE_URL',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'OPENAI_API_KEY',
+  'PAYPAL_CLIENT_ID',
+  'PAYPAL_CLIENT_SECRET',
+  'PAYPAL_ENV',
+] as const;
+
+const missing = REQUIRED_SERVER_VARS.filter((v) => !process.env[v]);
+if (missing.length > 0) {
+  console.error(`[startup] Missing required environment variables:\n  ${missing.join('\n  ')}`);
+  console.error('[startup] Copy .env.example to .env and fill in the values.');
+  process.exit(1);
+}
+
+if (!process.env.VITE_PAYPAL_CLIENT_ID) {
+  console.warn('[startup] VITE_PAYPAL_CLIENT_ID is not set — PayPal frontend will run in sandbox mode');
+}
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));

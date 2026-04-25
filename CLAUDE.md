@@ -53,3 +53,19 @@ This is a monorepo with a mostly client-side app. The Express backend (`server/`
 - To enable PostgreSQL: set `DATABASE_URL` env var and replace `MemStorage` in `server/storage.ts` with a Drizzle implementation
 
 **Port:** Server always runs on port 5000, serving both the API and the Vite-built frontend.
+
+## Environment Variables
+
+Copy `.env.example` to `.env` and fill in real values before running the server. The server will exit on startup if any required variable is missing.
+
+| Variable | Side | Required | Purpose |
+|---|---|---|---|
+| `SUPABASE_URL` | Server | Yes | Supabase project URL for database access |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server | Yes | Supabase service-role key (never expose to browser) |
+| `OPENAI_API_KEY` | Server | Yes | OpenAI API key for image generation |
+| `PAYPAL_CLIENT_ID` | Server | Yes | PayPal app client ID for server-side order creation/capture |
+| `PAYPAL_CLIENT_SECRET` | Server | Yes | PayPal app client secret for OAuth token exchange |
+| `PAYPAL_ENV` | Server | Yes | `sandbox` for testing, `live` for production payments |
+| `VITE_PAYPAL_CLIENT_ID` | Frontend | Warn | PayPal client ID passed to the browser SDK (safe to expose — it is public); falls back to `'sb'` sandbox mode if unset |
+
+**Important:** Only `VITE_` prefixed vars are bundled into the frontend by Vite. Never put secrets (service-role keys, client secrets, API keys) in a `VITE_` var.
