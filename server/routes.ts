@@ -1,10 +1,23 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import OpenAI from "openai";
+import sharp from "sharp";
 import { supabase } from "./lib/supabase";
 import { generateLabelImages } from "./services/imageGeneration";
 import { createPayPalOrder, capturePayPalOrder } from "./services/paypal";
+import { THEMES, buildLabelPrompt } from "./lib/buildLabelPrompt";
+import { getLabelBuffer } from "./lib/labelAssetCache";
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const LABEL_BUCKET = "generated-labels";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Ensure the generated-labels bucket exists and is public
+  await supabase.storage.createBucket(LABEL_BUCKET, { public: true }).catch(() => {
+    // Bucket already exists — ignore
+  });
+
   app.post('/api/sessions', async (req, res) => {
     const referrer = req.headers.referer ?? null;
     const userAgent = req.headers['user-agent'] ?? null;
@@ -331,6 +344,134 @@ export async function registerRoutes(app: Express): Promise<Server> {
         selected_image_url: item.selected_image_id ? (imageMap.get(item.selected_image_id) ?? null) : null,
       })),
     });
+  });
+
+  const THEME_IDS = new Set(THEMES.map((t) => t.id));
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  app.post('/api/labels/generate', async (req, res) => {
+    const { session_id, product_id, theme_id, description } = req.body;
+
+    // Validate input
+    if (!session_id || typeof session_id !== 'string' || !UUID_RE.test(session_id)) {
+      return res.status(400).json({ error: 'session_id must be a valid UUID' });
+    }
+    if (!product_id || typeof product_id !== 'string' || !UUID_RE.test(product_id)) {
+      return res.status(400).json({ error: 'product_id must be a valid UUID' });
+    }
+    if (!theme_id || typeof theme_id !== 'string' || !THEME_IDS.has(theme_id as (typeof THEMES)[number]['id'])) {
+      return res.status(400).json({ error: `theme_id must be one of: ${Array.from(THEME_IDS).join(', ')}` });
+    }
+    if (!description || typeof description !== 'string' || description.trim().length === 0 || description.length > 200) {
+      return res.status(400).json({ error: 'description must be a non-empty string of max 200 characters' });
+    }
+
+    // Verify session exists
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('sessions')
+      .select('id')
+      .eq('id', session_id)
+      .single();
+    if (sessionError || !sessionData) {
+      return res.status(400).json({ error: 'Invalid session_id' });
+    }
+
+    // Verify product exists
+    const { data: productData, error: productError } = await supabase
+      .from('products')
+      .select('id')
+      .eq('id', product_id)
+      .single();
+    if (productError || !productData) {
+      return res.status(400).json({ error: 'Invalid product_id' });
+    }
+
+    const theme = THEMES.find((t) => t.id === theme_id)!;
+    const prompt = buildLabelPrompt(description.trim(), theme);
+
+    const COUNT = 3;
+
+    // Download label asset (cached after first call)
+    let labelBuffer: Buffer;
+    try {
+      labelBuffer = await getLabelBuffer('jammin_duo_label_highres_strawberry');
+    } catch {
+      return res.status(503).json({ error: 'Label asset unavailable' });
+    }
+
+    // Generate all images in parallel
+    const requests = Array.from({ length: COUNT }, (_, index) =>
+      (async () => {
+        // Call OpenAI
+        let b64: string;
+        try {
+          const response = await openai.images.generate({
+            model: 'gpt-image-1',
+            prompt,
+            n: 1,
+            size: '1024x1024',
+          });
+          const raw = response.data?.[0]?.b64_json;
+          if (!raw) throw new Error('No image data returned');
+          b64 = raw;
+        } catch (err) {
+          throw Object.assign(new Error('openai'), { cause: err });
+        }
+
+        // Composite: resize label to 42% of generated image width, centre it
+        const generatedBuffer = Buffer.from(b64, 'base64');
+        const { width: bgWidth = 1024 } = await sharp(generatedBuffer).metadata();
+        const labelTargetWidth = Math.round(bgWidth * 0.42);
+        const resizedLabel = await sharp(labelBuffer).resize(labelTargetWidth).toBuffer();
+        const compositedBuffer = await sharp(generatedBuffer)
+          .composite([{ input: resizedLabel, gravity: 'center' }])
+          .jpeg({ quality: 90 })
+          .toBuffer();
+
+        // Upload to generated-labels bucket
+        const storagePath = `${session_id}/${product_id}/${Date.now()}-${index}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from(LABEL_BUCKET)
+          .upload(storagePath, compositedBuffer, { contentType: 'image/jpeg', upsert: false });
+        if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+
+        const { data: urlData } = supabase.storage.from(LABEL_BUCKET).getPublicUrl(storagePath);
+        const publicUrl = urlData.publicUrl;
+
+        // Insert DB row
+        const { data: imgRow, error: insertError } = await supabase
+          .from('generated_images')
+          .insert({
+            session_id,
+            product_id,
+            theme_id,
+            prompt_used: prompt,
+            storage_path: storagePath,
+            image_url: publicUrl,
+            public_url: publicUrl,
+            status: 'ready',
+            generation_model: 'gpt-image-1',
+            is_selected: false,
+          })
+          .select('id')
+          .single();
+        if (insertError || !imgRow) throw new Error(`DB insert failed: ${insertError?.message}`);
+
+        return { url: publicUrl, generatedImageId: imgRow.id as string };
+      })()
+    );
+
+    try {
+      const images = await Promise.all(requests);
+      return res.status(200).json({ images });
+    } catch (err: unknown) {
+      console.error('Label generation error:', err);
+      const message = err instanceof Error ? err.message : '';
+      if (message === 'openai') {
+        return res.status(502).json({ error: 'Image generation failed' });
+      }
+      return res.status(500).json({ error: 'Label generation failed' });
+    }
   });
 
   const httpServer = createServer(app);
