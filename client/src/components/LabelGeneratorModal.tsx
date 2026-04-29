@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useSession } from '@/context/SessionContext';
+import ThemePicker, { THEMES } from './ThemePicker';
 
 interface GeneratedImage {
   image_id: string;
@@ -22,33 +23,46 @@ export default function LabelGeneratorModal({
   onImagesGenerated,
 }: LabelGeneratorModalProps) {
   const { sessionId } = useSession();
-  const [prompt, setPrompt] = useState('');
+  const [description, setDescription] = useState('');
+  const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
+  const descLen = description.length;
+  const canSubmit = description.trim().length >= 3 && selectedTheme !== null;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!prompt.trim() || isLoading) return;
+    if (!canSubmit || isLoading) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const res = await fetch('/api/images/generate', {
+      const res = await fetch('/api/labels/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, product_id: productId, session_id: sessionId }),
+        body: JSON.stringify({
+          description: description.trim(),
+          theme_id: selectedTheme,
+          product_id: productId,
+          session_id: sessionId,
+        }),
       });
 
       if (!res.ok) throw new Error('Non-OK response');
 
-      const data = await res.json();
-      onImagesGenerated(data.images);
+      const data: { images: { url: string; generatedImageId: string }[] } = await res.json();
+      const mapped: GeneratedImage[] = data.images.map((img) => ({
+        image_id: img.generatedImageId,
+        image_url: img.url,
+      }));
+      onImagesGenerated(mapped);
       onClose();
     } catch {
-      setError('Generation failed. Please try again.');
+      setError('Label generation failed — please try again.');
       setIsLoading(false);
     }
   }
@@ -59,8 +73,8 @@ export default function LabelGeneratorModal({
       onClick={onClose}
     >
       <div
-        className="relative bg-white rounded-lg p-6 max-w-lg w-full mx-4 z-60"
-        onClick={e => e.stopPropagation()}
+        className="relative bg-white rounded-lg p-6 max-w-lg w-full mx-4 z-60 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
@@ -75,24 +89,42 @@ export default function LabelGeneratorModal({
         </h2>
 
         <form onSubmit={handleSubmit}>
+          {/* Description */}
           <div className="mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Describe your label
+            </label>
             <textarea
               rows={3}
-              maxLength={500}
-              value={prompt}
-              onChange={e => setPrompt(e.target.value)}
-              placeholder="Describe your label, e.g. 'watercolour strawberries with gold text on a cream background'"
+              maxLength={200}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="e.g. Strawberries with gold text on a cream background"
               className="w-full border border-gray-300 rounded-md p-3 resize-y focus:outline-none focus:ring-2 focus:ring-red-400"
               disabled={isLoading}
             />
           </div>
-          <div className="text-right text-xs text-gray-400 mb-2">
-            {prompt.length}/500
+          <div
+            className={`text-right text-xs mb-4 ${
+              descLen > 180 ? 'text-red-500 font-medium' : 'text-gray-400'
+            }`}
+          >
+            {descLen} / 200
           </div>
 
-          {error && (
-            <p className="text-red-500 text-sm mb-3">{error}</p>
-          )}
+          {/* Theme picker */}
+          <div className="mb-5">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Choose a style
+            </label>
+            <ThemePicker
+              themes={THEMES}
+              selectedId={selectedTheme}
+              onSelect={setSelectedTheme}
+            />
+          </div>
+
+          {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
 
           <div className="flex items-center justify-between">
             <button
@@ -125,15 +157,15 @@ export default function LabelGeneratorModal({
                     d="M4 12a8 8 0 018-8v8H4z"
                   />
                 </svg>
-                Generating... (this takes ~15 seconds)
+                Generating your labels… this takes around 30 seconds
               </div>
             ) : (
               <button
                 type="submit"
-                disabled={!prompt.trim()}
+                disabled={!canSubmit}
                 className="bg-red-500 text-white px-5 py-2 rounded-full hover:bg-red-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Generate labels
+                Generate Labels
               </button>
             )}
           </div>
