@@ -45,6 +45,7 @@ export function buildLabelPrompt(description: string, theme: Theme): string {
 
   return `Create a ${theme.stylePrompt} scene: ${safeDesc}.
 The image is a flat rectangular background for a jam jar label.
+Generate a single flat rectangular image — this is the front label background only.
 Fill the entire canvas with the themed scene.
 Do not generate a jar, bottle, or any product packaging.
 Do not show front and back label layouts.
