@@ -51,7 +51,7 @@ Do not generate a jar, bottle, or any product packaging.
 Do not show front and back label layouts.
 Do not include any product photography.
 The image will be used purely as a label background — it is a flat scene only.
-The central area (approximately the middle third of the image) must remain visually simple and uncluttered with no text, logos, faces or complex objects, so a product label can be placed there.
-Ensure rich, detailed decoration around the edges and corners.
+CRITICAL: The central 40% of the image (both horizontally and vertically) must be completely clear — a plain, low-detail area of a single muted colour or gentle gradient with absolutely no text, no faces, no objects, no logos, and no complex patterns. This blank central zone is essential so a product label can be composited on top.
+All decorative detail, illustration, and pattern must be confined entirely to the outer edges and corners of the image, leaving the centre empty.
 Do not add any text or branding to the image.`;
 }

@@ -442,7 +442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             model: 'gpt-image-1',
             prompt,
             n: 1,
-            size: '1024x1024',
+            size: '1536x1024',
           });
           const raw = response.data?.[0]?.b64_json;
           if (!raw) throw new Error('No image data returned');
@@ -453,7 +453,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Composite: resize label to 42% of generated image width, centre it
         const generatedBuffer = Buffer.from(b64, 'base64');
-        const { width: bgWidth = 1024 } = await sharp(generatedBuffer).metadata();
+        const { width: bgWidth = 1536 } = await sharp(generatedBuffer).metadata();
         const labelTargetWidth = Math.round(bgWidth * 0.42);
         const resizedLabel = await sharp(labelBuffer).resize(labelTargetWidth).toBuffer();
         const compositedBuffer = await sharp(generatedBuffer)
