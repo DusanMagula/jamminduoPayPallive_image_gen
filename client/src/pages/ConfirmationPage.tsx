@@ -98,7 +98,7 @@ export default function ConfirmationPage() {
                 <img
                   src={item.selected_image_url}
                   alt="Custom label"
-                  className="w-16 h-16 object-cover rounded border"
+                  className="w-28 rounded shadow mt-2"
                 />
               )}
               <div className="flex-1">

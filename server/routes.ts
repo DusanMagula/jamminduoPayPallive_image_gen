@@ -212,12 +212,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     // Insert order items
-    const orderItems = items.map((item: { product_id: string; quantity: number; selected_image_id?: string | null }) => ({
+    const orderItems = items.map((item: { product_id: string; quantity: number; selected_image_id?: string | null; selected_image_url?: string | null }) => ({
       order_id: orderData.id,
       product_id: item.product_id,
       quantity: item.quantity,
       unit_price: productMap.get(item.product_id)!.price,
       selected_image_id: item.selected_image_id ?? null,
+      selected_image_url: item.selected_image_url ?? null,
     }));
     const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
     if (itemsError) {
@@ -305,28 +306,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const { data: rawItems, error: itemsError } = await supabase
       .from('order_items')
-      .select('quantity, unit_price, selected_image_id, products(name)')
+      .select('quantity, unit_price, selected_image_url, products(name)')
       .eq('order_id', order_id);
 
     if (itemsError || !rawItems) {
       return res.status(500).json({ error: 'Failed to fetch order details' });
-    }
-
-    const imageIds = rawItems
-      .map((item: { selected_image_id: string | null }) => item.selected_image_id)
-      .filter((id): id is string => id !== null);
-
-    let imageMap = new Map<string, string>();
-    if (imageIds.length > 0) {
-      const { data: images } = await supabase
-        .from('generated_images')
-        .select('id, image_url')
-        .in('id', imageIds);
-      if (images) {
-        imageMap = new Map(
-          (images as { id: string; image_url: string }[]).map(img => [img.id, img.image_url])
-        );
-      }
     }
 
     return res.status(200).json({
@@ -337,17 +321,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
       customer_name: order.customer_name ?? null,
       customer_email: order.customer_email ?? null,
       paid_at: order.paid_at,
-      items: rawItems.map((item: { quantity: number; unit_price: number; selected_image_id: string | null; products: { name: string }[] | { name: string } | null }) => ({
+      items: rawItems.map((item: { quantity: number; unit_price: number; selected_image_url: string | null; products: { name: string }[] | { name: string } | null }) => ({
         product_name: (Array.isArray(item.products) ? item.products[0]?.name : item.products?.name) ?? 'Unknown',
         quantity: item.quantity,
         unit_price: item.unit_price,
-        selected_image_url: item.selected_image_id ? (imageMap.get(item.selected_image_id) ?? null) : null,
+        selected_image_url: item.selected_image_url ?? null,
       })),
     });
   });
 
   const THEME_IDS = new Set(THEMES.map((t) => t.id));
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  app.patch('/api/labels/:generatedImageId/select', async (req, res) => {
+    const { generatedImageId } = req.params;
+    const { sessionId, productId } = req.body;
+
+    if (!UUID_RE.test(generatedImageId)) {
+      return res.status(400).json({ error: 'generatedImageId must be a valid UUID' });
+    }
+    if (!sessionId || typeof sessionId !== 'string' || !UUID_RE.test(sessionId)) {
+      return res.status(400).json({ error: 'sessionId must be a valid UUID' });
+    }
+    if (!productId || typeof productId !== 'string' || !UUID_RE.test(productId)) {
+      return res.status(400).json({ error: 'productId must be a valid UUID' });
+    }
+
+    const { data: imgData, error: imgError } = await supabase
+      .from('generated_images')
+      .select('id, session_id, product_id')
+      .eq('id', generatedImageId)
+      .single();
+
+    if (imgError || !imgData) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+    if (imgData.session_id !== sessionId || imgData.product_id !== productId) {
+      return res.status(403).json({ error: 'Image does not belong to this session/product' });
+    }
+
+    const { error: deselectError } = await supabase
+      .from('generated_images')
+      .update({ is_selected: false })
+      .eq('session_id', sessionId)
+      .eq('product_id', productId);
+
+    if (deselectError) {
+      return res.status(500).json({ error: 'Failed to update selection' });
+    }
+
+    const { error: selectError } = await supabase
+      .from('generated_images')
+      .update({ is_selected: true })
+      .eq('id', generatedImageId);
+
+    if (selectError) {
+      return res.status(500).json({ error: 'Failed to update selection' });
+    }
+
+    return res.json({ ok: true });
+  });
 
   app.post('/api/labels/generate', async (req, res) => {
     const { session_id, product_id, theme_id, description } = req.body;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Car as Jar, ShoppingBasket } from 'lucide-react';
 import type { CartItem } from '@/types/cart';
+import { useSession } from '@/context/SessionContext';
 import LabelGeneratorModal from './LabelGeneratorModal';
 import ImageSelector from './ImageSelector';
 
@@ -23,13 +24,19 @@ export default function ProductCard({ id, name, displayName, description, price,
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[] | null>(null);
   const [showImageSelector, setShowImageSelector] = useState(false);
+  const { sessionId } = useSession();
 
   function handleImagesGenerated(images: GeneratedImage[]) {
     setGeneratedImages(images);
     setShowImageSelector(true);
   }
 
-  function handleSelect(selectedImageId: string, selectedImageUrl: string) {
+  async function handleSelect(selectedImageId: string, selectedImageUrl: string) {
+    await fetch(`/api/labels/${selectedImageId}/select`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, productId: id }),
+    });
     onAddToCart({ id, product_id: id, name, price, selected_image_id: selectedImageId, selected_image_url: selectedImageUrl });
     setShowImageSelector(false);
     setGeneratedImages(null);

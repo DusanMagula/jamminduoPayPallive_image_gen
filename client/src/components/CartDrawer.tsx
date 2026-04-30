@@ -44,6 +44,7 @@ export default function CartDrawer({
             product_id: item.product_id,
             quantity: item.quantity,
             selected_image_id: item.selected_image_id ?? null,
+            selected_image_url: item.selected_image_url ?? null,
           })),
         }),
       });
