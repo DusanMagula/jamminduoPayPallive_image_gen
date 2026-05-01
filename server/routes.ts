@@ -412,7 +412,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Verify product exists
     const { data: productData, error: productError } = await supabase
       .from('products')
-      .select('id')
+      .select('id, name')
       .eq('id', product_id)
       .single();
     if (productError || !productData) {
@@ -424,10 +424,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const COUNT = 3;
 
+    const LABEL_FILENAME_BY_PRODUCT: Record<string, string> = {
+      'Strawberry Jam': 'jammin_duo_label_highres_strawberry',
+      'Blueberry Jam': 'jammin_duo_label_highres_blueberry',
+    };
+    const labelFilename = LABEL_FILENAME_BY_PRODUCT[productData.name] ?? 'jammin_duo_label_highres_strawberry';
+
     // Download label asset (cached after first call)
     let labelBuffer: Buffer;
     try {
-      labelBuffer = await getLabelBuffer('jammin_duo_label_highres_strawberry');
+      labelBuffer = await getLabelBuffer(labelFilename);
     } catch {
       return res.status(503).json({ error: 'Label asset unavailable' });
     }
