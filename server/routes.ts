@@ -448,7 +448,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             model: 'gpt-image-1',
             prompt,
             n: 1,
-            size: '1536x1024',
+            size: '1024x1024',
           });
           const raw = response.data?.[0]?.b64_json;
           if (!raw) throw new Error('No image data returned');
@@ -457,12 +457,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw Object.assign(new Error('openai'), { cause: err });
         }
 
-        // Composite: resize label to 42% of generated image width, centre it
+        // Resize to 768x512 (crop to fill), composite label at 42% of output width
         const generatedBuffer = Buffer.from(b64, 'base64');
-        const { width: bgWidth = 1536 } = await sharp(generatedBuffer).metadata();
-        const labelTargetWidth = Math.round(bgWidth * 0.42);
+        const OUTPUT_W = 768;
+        const OUTPUT_H = 512;
+        const resizedBg = await sharp(generatedBuffer)
+          .resize(OUTPUT_W, OUTPUT_H, { fit: 'cover' })
+          .toBuffer();
+        const labelTargetWidth = Math.round(OUTPUT_W * 0.42);
         const resizedLabel = await sharp(labelBuffer).resize(labelTargetWidth).toBuffer();
-        const compositedBuffer = await sharp(generatedBuffer)
+        const compositedBuffer = await sharp(resizedBg)
           .composite([{ input: resizedLabel, gravity: 'center' }])
           .jpeg({ quality: 90 })
           .toBuffer();

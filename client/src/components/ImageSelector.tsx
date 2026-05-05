@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface GeneratedImage {
   image_id: string;
@@ -17,8 +17,17 @@ interface ImageSelectorProps {
 
 export default function ImageSelector({ images, productName, onSelect, onRegenerate, onSkip }: ImageSelectorProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<GeneratedImage | null>(null);
 
   const selectedImage = images.find(img => img.image_id === selectedId);
+
+  // Close lightbox on Escape key
+  useEffect(() => {
+    if (!lightboxImage) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightboxImage(null); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [lightboxImage]);
 
   return (
     <div className="mt-4">
@@ -31,8 +40,8 @@ export default function ImageSelector({ images, productName, onSelect, onRegener
         {images.slice(0, 3).map((img, i) => (
           <button
             key={img.image_id}
-            onClick={() => setSelectedId(img.image_id)}
-            className={`rounded overflow-hidden border-2 transition ${
+            onClick={() => setLightboxImage(img)}
+            className={`rounded overflow-hidden border-2 transition cursor-zoom-in ${
               selectedId === img.image_id ? 'border-red-500 ring-2 ring-red-500' : 'border-transparent'
             }`}
           >
@@ -62,6 +71,48 @@ export default function ImageSelector({ images, productName, onSelect, onRegener
           Skip custom label
         </button>
       </div>
+
+      {/* Lightbox */}
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightboxImage(null)}
+        >
+          <div
+            className="relative max-w-3xl w-full"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setLightboxImage(null)}
+              className="absolute -top-10 right-0 text-white text-3xl leading-none hover:text-gray-300 transition"
+              aria-label="Close preview"
+            >
+              &times;
+            </button>
+
+            <img
+              src={lightboxImage.image_url}
+              alt={`${productName} label full preview`}
+              className="w-full h-auto rounded shadow-xl"
+            />
+
+            <button
+              onClick={() => {
+                setSelectedId(lightboxImage.image_id);
+                setLightboxImage(null);
+              }}
+              className={`mt-4 w-full py-2 rounded-full font-semibold transition ${
+                selectedId === lightboxImage.image_id
+                  ? 'bg-green-600 text-white cursor-default'
+                  : 'bg-red-500 text-white hover:bg-red-600'
+              }`}
+            >
+              {selectedId === lightboxImage.image_id ? 'Selected' : 'Select this label'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
